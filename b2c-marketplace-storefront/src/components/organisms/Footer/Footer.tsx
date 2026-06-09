@@ -16,10 +16,15 @@ const FOOTER_LINKS = [
   { text: "ΕΚΑΝ", url: "https://ekanrecycling.gr/" },
 ];
 
+const QUICK_LINKS = [
+  { text: "About Us", url: "/about_us" },
+  { text: "Privacy Policy", url: "/privacy" },
+  { text: "Terms of Service", url: "/terms" },
+];
+
 export function Footer() {
   return (
     <footer className={`${roboto.className} w-full relative overflow-hidden`}>
-      
       {/* Top Footer Section */}
       <div
         className="w-full text-white relative z-10"
@@ -35,7 +40,6 @@ export function Footer() {
         }}
       >
         <div className="container mx-auto flex flex-col lg:flex-row items-center justify-between p-8 md:p-12 relative z-10">
-          
           {/* Logo */}
           <div className="flex flex-col justify-center mb-6 lg:mb-0">
             <img
@@ -45,27 +49,53 @@ export function Footer() {
             />
           </div>
 
-          {/* Quick Links */}
-          <div className="px-4 lg:px-0 text-center lg:text-left">
-            <h2
-              className="text-xl font-semibold mb-4 uppercase text-white"
-              style={{ textShadow: "0 1px 3px rgba(0,0,0,0.5)" }}
-            >
-              Εταιροι
-            </h2>
-            <nav className="flex flex-col space-y-3 text-sm lg:text-base">
-              {FOOTER_LINKS.map((link) => (
-                <a
-                  key={link.text}
-                  href={link.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[rgb(var(--neutral-0))] hover:text-[rgb(var(--brand-100))] transition-colors"
-                >
-                  {link.text}
-                </a>
-              ))}
-            </nav>
+          {/* Links Area */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-12 px-4 lg:px-0 text-center lg:text-left">
+            {/* Partners */}
+            <div>
+              <h2
+                className="text-xl font-semibold mb-4 uppercase text-white"
+                style={{ textShadow: "0 1px 3px rgba(0,0,0,0.5)" }}
+              >
+                Εταιροι
+              </h2>
+
+              <nav className="flex flex-col space-y-3 text-sm lg:text-base">
+                {FOOTER_LINKS.map((link) => (
+                  <a
+                    key={link.text}
+                    href={link.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[rgb(var(--neutral-0))] hover:text-[rgb(var(--brand-100))] transition-colors"
+                  >
+                    {link.text}
+                  </a>
+                ))}
+              </nav>
+            </div>
+
+            {/* Quick Links */}
+            <div>
+              <h2
+                className="text-xl font-semibold mb-4 uppercase text-white"
+                style={{ textShadow: "0 1px 3px rgba(0,0,0,0.5)" }}
+              >
+                Quick Links
+              </h2>
+
+              <nav className="flex flex-col space-y-3 text-sm lg:text-base">
+                {QUICK_LINKS.map((link) => (
+                  <a
+                    key={link.text}
+                    href={link.url}
+                    className="text-[rgb(var(--neutral-0))] hover:text-[rgb(var(--brand-100))] transition-colors"
+                  >
+                    {link.text}
+                  </a>
+                ))}
+              </nav>
+            </div>
           </div>
         </div>
 
@@ -123,7 +153,7 @@ export function Footer() {
                 viewBox="0 0 24 24"
                 aria-hidden="true"
               >
-                <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm12 0h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/>
+                <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11 19h-3v-11h3v11zm12 0h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z" />
               </svg>
             </a>
           </div>

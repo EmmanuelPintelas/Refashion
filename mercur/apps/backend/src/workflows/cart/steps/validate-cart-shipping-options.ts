@@ -29,28 +29,52 @@ export const validateCartShippingOptionsStep = createStep(
   async (input: ValidateCartShippingOptionsInput, { container }) => {
     const query = container.resolve(ContainerRegistrationKeys.QUERY)
 
-    // 1) duplicate options check
-    if (input.option_ids.length !== new Set(input.option_ids).size) {
+    const optionIds = [
+      ...new Set((input.option_ids ?? []).filter(Boolean)),
+    ]
+
+    if (!input.cart_id) {
       throw new MedusaError(
         MedusaError.Types.INVALID_DATA,
-        'Some of the shipping methods are doubled!'
+        'Cart id is required'
       )
     }
 
-    // 2) cart → product ids
+    if (!optionIds.length) {
+      throw new MedusaError(
+        MedusaError.Types.INVALID_DATA,
+        'At least one shipping option is required'
+      )
+    }
+
+    // 1) cart → product ids
     const {
       data: [cart],
     } = await query.graph({
       entity: 'cart',
-      fields: ['id', 'items.product_id'],
+      fields: ['id', 'items.product_id', 'items.variant.product_id'],
       filters: { id: input.cart_id },
     })
 
-    const productIds = (cart?.items ?? []).map((i: any) => i.product_id)
+    const productIds = [
+      ...new Set(
+        (cart?.items ?? [])
+          .map((i: any) => i?.product_id ?? i?.variant?.product_id)
+          .filter(Boolean)
+      ),
+    ]
+
     dbg('cart products =', productIds)
 
-    // 3) links που χρειαζόμαστε (ζητάμε nested seller.* για ασφάλεια)
-    const [{ data: sellerProductsRaw }, { data: sellerShipLinksRaw }] =
+    if (!productIds.length) {
+      throw new MedusaError(
+        MedusaError.Types.INVALID_DATA,
+        'Cart has no products to validate shipping options against'
+      )
+    }
+
+    // 2) links που χρειαζόμαστε
+    const [{ data: sellerProductsRaw = [] }, { data: sellerShipLinksRaw = [] }] =
       await promiseAll([
         query.graph({
           entity: sellerProductLink.entryPoint,
@@ -59,23 +83,36 @@ export const validateCartShippingOptionsStep = createStep(
         }),
         query.graph({
           entity: sellerShippingOptionLink.entryPoint,
-          fields: ['shipping_option_id', 'shipping_option.id', 'seller.id', 'seller_id'],
-          filters: { shipping_option_id: input.option_ids },
+          fields: [
+            'shipping_option_id',
+            'shipping_option.id',
+            'seller.id',
+            'seller_id',
+          ],
+          filters: { shipping_option_id: optionIds },
         }),
       ])
 
     dbg('sellerProductsRaw sample =', sellerProductsRaw?.[0])
     dbg('sellerShipLinksRaw sample =', sellerShipLinksRaw?.[0])
 
-    // 4) set με seller_ids που υπάρχουν στο cart (από τα product links)
+    // 3) seller_ids που υπάρχουν στο cart
     const cartSellerIds = new Set<string>(
       (sellerProductsRaw as any[])
         .map((sp) => sp?.seller?.id ?? sp?.seller_id)
         .filter(Boolean)
     )
+
     dbg('cartSellerIds =', Array.from(cartSellerIds))
 
-    // 5) ομαδοποίηση shipping links ανά option_id
+    if (!cartSellerIds.size) {
+      throw new MedusaError(
+        MedusaError.Types.INVALID_DATA,
+        'No sellers found for the cart products'
+      )
+    }
+
+    // 4) ομαδοποίηση shipping links ανά option_id
     const byOption = new Map<
       string,
       { option_id: string; seller_id: string }[]
@@ -85,22 +122,26 @@ export const validateCartShippingOptionsStep = createStep(
       const optionId: string =
         lnk?.shipping_option_id ?? lnk?.shipping_option?.id
       const sellerId: string = lnk?.seller?.id ?? lnk?.seller_id
-      if (!optionId || !sellerId) return
+
+      if (!optionId || !sellerId) {
+        return
+      }
+
       const arr = byOption.get(optionId) ?? []
       arr.push({ option_id: optionId, seller_id: sellerId })
       byOption.set(optionId, arr)
     })
 
-    // 6) για ΚΑΘΕ option που ζητήθηκε, βρες ΕΝΑ link που να ταιριάζει με cart sellers
+    // 5) για ΚΑΘΕ unique option, βρες ΕΝΑ link που ταιριάζει με cart sellers
     const matchedLinks: { shipping_option_id: string; seller_id: string }[] = []
 
-    for (const optionId of input.option_ids) {
+    for (const optionId of optionIds) {
       const links = byOption.get(optionId) ?? []
       const match = links.find((l) => cartSellerIds.has(l.seller_id))
+
       dbg(`option ${optionId} → links=`, links, 'match=', match)
 
       if (!match) {
-        // κανένα link του option δεν ανήκει σε seller του cart ⇒ απορρίπτεται
         throw new MedusaError(
           MedusaError.Types.INVALID_DATA,
           `Shipping option with id: ${optionId} is not available for any of the cart items`
@@ -115,7 +156,6 @@ export const validateCartShippingOptionsStep = createStep(
 
     dbg('matchedLinks (filtered 1:1) =', matchedLinks)
 
-    // 7) επιστρέφουμε τα raw sellerProducts και ΤΑ ΦΙΛΤΡΑΡΙΣΜΕΝΑ shippingOption links
     return new StepResponse({
       sellerProducts: sellerProductsRaw,
       sellerShippingOptions: matchedLinks,

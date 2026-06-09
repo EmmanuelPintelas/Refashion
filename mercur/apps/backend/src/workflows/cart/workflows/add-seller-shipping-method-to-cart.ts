@@ -30,15 +30,17 @@ export const addSellerShippingMethodToCartWorkflow = createWorkflow(
     }).config({ name: 'cart-query' })
 
     const validateCartShippingOptionsInput = transform(
-      { carts, option: input.option },
-      ({ carts: [cart], option }) => ({
-        cart_id: cart.id,
-        option_ids: [
-          ...cart.shipping_methods.map((method) => method.shipping_option_id),
-          option.id
-        ]
-      })
-    )
+  { carts, option: input.option },
+  ({ carts: [cart], option }) => ({
+    cart_id: cart.id,
+    option_ids: [
+      ...new Set([
+        ...cart.shipping_methods.map((method) => method.shipping_option_id),
+        option.id
+      ])
+    ]
+  })
+)
 
     validateCartShippingOptionsStep(validateCartShippingOptionsInput)
 

@@ -3,10 +3,16 @@ import { z } from 'zod'
 import { createFindParams } from '@medusajs/medusa/api/utils/validators'
 
 export type StoreGetReviewsParamsType = z.infer<typeof StoreGetReviewsParams>
-export const StoreGetReviewsParams = createFindParams({
-  offset: 0,
-  limit: 50
+
+export const StoreGetReviewsParams = z.object({
+  offset: z.coerce.number().optional().default(0),
+  limit: z.coerce.number().optional().default(50),
+  fields: z.string().optional(),
+
+  reference: z.enum(['seller', 'product']).optional(),
+  reference_id: z.string().optional()
 })
+
 
 /**
  * @schema StoreCreateReview

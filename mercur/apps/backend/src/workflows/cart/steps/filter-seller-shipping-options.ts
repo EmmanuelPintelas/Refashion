@@ -1,8 +1,5 @@
 import { ShippingOptionDTO } from '@medusajs/framework/types'
-import {
-  ContainerRegistrationKeys,
-  arrayDifference,
-} from '@medusajs/framework/utils'
+import { ContainerRegistrationKeys } from '@medusajs/framework/utils'
 import { StepResponse, createStep } from '@medusajs/framework/workflows-sdk'
 
 import sellerProduct from '../../../links/seller-product'
@@ -16,76 +13,100 @@ export const filterSellerShippingOptionsStep = createStep(
   ) => {
     const query = container.resolve(ContainerRegistrationKeys.QUERY)
 
-    // 1) Cart (safe)
-    const { data: carts = [] } = await query.graph({
-      entity: 'cart',
-      fields: ['items.product_id', 'shipping_methods.shipping_option_id'],
-      filters: { id: input.cart_id },
-    })
-    const cart = carts[0] ?? { items: [], shipping_methods: [] }
-    const items = Array.isArray(cart.items) ? cart.items : []
-    const existing = Array.isArray(cart.shipping_methods) ? cart.shipping_methods : []
+    const baseOptions = Array.isArray(input?.shipping_options)
+      ? (input.shipping_options as ShippingOptionDTO[])
+      : []
 
-    // 2) Sellers in cart
+    if (!input.cart_id || !baseOptions.length) {
+      return new StepResponse([])
+    }
+
+    // 1) Get current cart items
+const { data: carts = [] } = await query.graph({
+  entity: 'cart',
+  fields: ['items.product_id', 'items.variant.product_id'],
+  filters: { id: input.cart_id },
+})
+
+const cart = carts[0]
+
+const items = Array.isArray(cart?.items) ? cart.items : []
+
+const productIds = [
+  ...new Set(
+    items
+      .map((item: any) => item?.product_id ?? item?.variant?.product_id)
+      .filter(Boolean)
+  ),
+]
+
+    if (!productIds.length) {
+      return new StepResponse([])
+    }
+    //console.log('shipping filter debug', {
+    //  cart_id: input.cart_id,
+    //  base_options_count: baseOptions.length,
+    //  items_count: items.length,
+    //  productIds,
+    //})
+
+    // 2) Find sellers that own the current products in the cart
     const { data: sellersInCart = [] } = await query.graph({
       entity: sellerProduct.entryPoint,
       fields: ['seller_id'],
-      filters: { product_id: items.map((i: any) => i?.product_id).filter(Boolean) },
+      filters: { product_id: productIds },
     })
 
-    const existingShippingOptions = existing
-      .map((sm: any) => sm?.shipping_option_id)
-      .filter(Boolean)
+    const sellerIdsInCart = [
+      ...new Set(
+        sellersInCart
+          .map((sellerProductLink: any) => sellerProductLink?.seller_id)
+          .filter(Boolean)
+      ),
+    ]
 
-    const { data: sellersAlreadyCovered = [] } = await query.graph({
-      entity: sellerShippingOption.entryPoint,
-      fields: ['seller_id'],
-      filters: { shipping_option_id: existingShippingOptions },
-    })
+    if (!sellerIdsInCart.length) {
+      return new StepResponse([])
+    }
 
-    const sellersToFindShippingOptions = arrayDifference(
-      [...new Set(sellersInCart.map((s: any) => s?.seller_id).filter(Boolean))],
-      [...new Set(sellersAlreadyCovered.map((s: any) => s?.seller_id).filter(Boolean))]
-    )
-
-    // 3) Seller ↔ ShippingOption relations (safe filters)
+    // 3) Find shipping options linked only to the sellers of the current cart products
     const { data: sellerShippingOptions = [] } = await query.graph({
       entity: sellerShippingOption.entryPoint,
       fields: ['shipping_option_id', 'seller.name', 'seller.id'],
-      // αν είναι κενό, μη βάλεις filter για να μην πετάει error
-      filters: sellersToFindShippingOptions.length
-        ? { seller_id: sellersToFindShippingOptions }
-        : {},
+      filters: { seller_id: sellerIdsInCart },
     })
 
-    const baseOptions = Array.isArray(input?.shipping_options)
-      ? (input!.shipping_options as ShippingOptionDTO[])
-      : []
-
-    // Fallback: αν δεν υπάρχει καθόλου mapping, ΜΗΝ μπλοκάρεις — επέστρεψε ό,τι ήρθε
     if (!sellerShippingOptions.length) {
-      return new StepResponse(baseOptions)
+      return new StepResponse([])
     }
 
-    const applicableIds = new Set(
+    const applicableOptionIds = new Set(
       sellerShippingOptions
-        .map((so: any) => so?.shipping_option_id)
+        .map((relation: any) => relation?.shipping_option_id)
         .filter(Boolean)
     )
-
+    //console.log('seller shipping filter ids', {
+    //  baseOptionIds: baseOptions.map((option) => option.id),
+    //  applicableOptionIds: Array.from(applicableOptionIds),
+    //  sellerShippingOptions,
+    //})
+    // 4) Keep only Medusa-valid shipping options that belong to those sellers
     const optionsAvailable = baseOptions
-      .filter((option) => applicableIds.has(option.id))
-      .map((option) => {
-        const relation = sellerShippingOptions.find(
-          (o: any) => o?.shipping_option_id === option.id
-        )
-        return {
-          ...option,
-          seller_name: relation?.seller?.name ?? null,
-          seller_id: relation?.seller?.id ?? null,
-        }
-      })
+  .filter((option) => applicableOptionIds.has(option.id))
+  .map((option) => {
+    const relation = sellerShippingOptions.find(
+      (relation: any) => relation?.shipping_option_id === option.id
+    )
 
-    return new StepResponse(optionsAvailable)
+    return {
+      ...option,
+      seller_name: relation?.seller?.name ?? null,
+      seller_id: relation?.seller?.id ?? null,
+    }
+  })
+
+//console.log('optionsAvailable', optionsAvailable)
+
+return new StepResponse(optionsAvailable)
   }
 )

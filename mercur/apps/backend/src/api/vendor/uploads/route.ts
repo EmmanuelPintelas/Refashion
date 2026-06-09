@@ -19,14 +19,26 @@ export const POST = async (
     )
   }
 
-  const { result: files } = await uploadFilesWorkflow(req.scope).run({
+  const { result } = await uploadFilesWorkflow(req.scope).run({
     input: {
-      files: input?.map((f) => ({
+      files: input.map((f) => ({
         filename: f.originalname,
         mimeType: f.mimetype,
         content: f.buffer.toString('binary'),
         access: 'public'
       }))
+    }
+  })
+
+  const publicBackendUrl =
+    process.env.PUBLIC_BACKEND_URL || process.env.BACKEND_URL || 'http://localhost:9000'
+
+  const files = result.map((file: any) => {
+    const parsedUrl = new URL(file.url)
+
+    return {
+      ...file,
+      url: `${publicBackendUrl}${parsedUrl.pathname}`
     }
   })
 
